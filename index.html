@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lightspeed Explorer</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: black; }
+    canvas { display: block; }
+    #overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: sans-serif;
+      z-index: 10;
+    }
+    /* Control buttons container */
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: auto auto;
+      grid-template-rows: auto auto;
+      gap: 10px;
+      z-index: 10;
+    }
+    #controls button {
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.1);
+      color: white;
+      border: 1px solid white;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    #controls button:active {
+      background: rgba(255,255,255,0.2);
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+</head>
+<body>
+  <!-- <div id="overlay">Click to start exploring.</div> -->
+  <!-- Control buttons -->
+  <div id="controls">
+    <button id="accelerateButton">Accelerate</button>
+    <button id="fullStopButton">Full Stop</button>
+    <button id="brakeButton">Brake</button>
+    <button id="pauseButton">Pause</button>
+  </div>
+  <script>
+    let scene, camera, renderer;
+    let speed = 0;
+    let pitch = 0, yaw = 0;
+    let spheres = [];
+    const spawnDistance = 500;
+    const initialFillCount = 4000;
+    let paused = true;
+    let braking = false;
+
+    init();
+    animate();
+
+    function clamp(x, min, max) {
+      return x < min ? min : x > max ? max : x;
+    }
+
+    function colorTemperatureToRGB(kelvin) {
+      const temp = kelvin / 100;
+      let red, green, blue;
+      if (temp <= 66) {
+        red = 255;
+        green = clamp(99.47 * Math.log(temp) - 161.12, 0, 255);
+        blue = temp <= 19 ? 0 : clamp(138.52 * Math.log(temp - 10) - 305.04, 0, 255);
+      } else {
+        red = clamp(329.7 * Math.pow(temp - 60, -0.1332), 0, 255);
+        green = clamp(288.12 * Math.pow(temp - 60, -0.0755), 0, 255);
+        blue = 255;
+      }
+      return new THREE.Color(red/255, green/255, blue/255);
+    }
+
+    function randomStarColor() {
+      const r = Math.random();
+      let kelvin;
+      if (r < 0.76) kelvin = 3000 + Math.random() * 500;
+      else if (r < 0.91) kelvin = 4000 + Math.random() * 1000;
+      else if (r < 0.97) kelvin = 5500 + Math.random() * 500;
+      else if (r < 0.995) kelvin = 7000 + Math.random() * 2000;
+      else kelvin = 15000 + Math.random() * 25000;
+      return colorTemperatureToRGB(kelvin);
+    }
+
+    function init() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        spawnDistance + 100
+      );
+      camera.position.set(0, 0, 0);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000000, 0.1);
+      renderer.autoClear = false;
+      document.body.appendChild(renderer.domElement);
+
+      document.body.addEventListener('click', () => document.body.requestPointerLock());
+      window.addEventListener('resize', onWindowResize);
+      document.addEventListener('keydown', onKeyDown);
+      document.addEventListener('keyup', onKeyUp);
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('pointerlockchange', onPointerLockChange);
+
+      document.getElementById('accelerateButton').onclick = () => {
+        if (!paused) { speed = Math.min(64, Math.max(speed * 1.25, 0.5)); braking = false; }
+      };
+      document.getElementById('brakeButton').onclick = () => {
+        if (!paused) { speed *= 0.8; braking = false; }
+      };
+      document.getElementById('fullStopButton').onclick = () => { if (!paused) braking = true; };
+      document.getElementById('pauseButton').onclick = () => document.exitPointerLock();
+
+      for (let i = 0; i < initialFillCount; i++) spawnInitialSphere();
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onKeyDown(e) {
+      if (paused) return;
+      if (e.key === 'w') { speed = Math.min(64, Math.max(speed * 1.25, 0.5)); braking = false; }
+      if (e.key === 's') { speed *= 0.8; braking = false; }
+      if (e.code === 'Space') braking = true;
+    }
+
+    function onKeyUp(e) {
+      // no-op
+    }
+
+    function onMouseMove(e) {
+      if (paused) return;
+      // Incremental rotation: yaw around camera's local up, pitch around camera's local right
+      const movementX = e.movementX || 0;
+      const movementY = e.movementY || 0;
+      // Rotate pitch (up/down) around camera's local X axis
+      camera.rotateX(-movementY * 0.002);
+      // Rotate yaw (left/right) around camera's local Y axis
+      camera.rotateY(-movementX * 0.002);
+    }
+
+    function onPointerLockChange() {
+      paused = !document.pointerLockElement;
+      document.getElementById('overlay').style.display = paused ? 'block' : 'none';
+      if (paused) braking = false;
+    }
+
+    function randomPointOnSphere(r) {
+      const u = Math.random(), v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
+      return new THREE.Vector3(
+        r * Math.sin(phi) * Math.cos(theta),
+        r * Math.sin(phi) * Math.sin(theta),
+        r * Math.cos(phi)
+      );
+    }
+
+    function randomPointInSphere(r) {
+      const u = Math.random(), v = Math.random(), w = Math.random();
+      const d = r * Math.cbrt(u);
+      const theta = 2 * Math.PI * v;
+      const phi = Math.acos(2 * w - 1);
+      return new THREE.Vector3(
+        d * Math.sin(phi) * Math.cos(theta),
+        d * Math.sin(phi) * Math.sin(theta),
+        d * Math.cos(phi)
+      );
+    }
+
+    function createSphereMesh() {
+      const geo = new THREE.SphereGeometry(0.5, 16, 16);
+      const col = randomStarColor();
+      return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col }));
+    }
+
+    function spawnSphere() {
+      const s = createSphereMesh();
+      s.position.copy(camera.position).add(randomPointOnSphere(spawnDistance));
+      scene.add(s);
+      spheres.push(s);
+    }
+
+    function spawnInitialSphere() {
+      const s = createSphereMesh();
+      s.position.copy(camera.position).add(randomPointInSphere(spawnDistance));
+      scene.add(s);
+      spheres.push(s);
+    }
+
+    function pruneSpheres() {
+      const max2 = spawnDistance * spawnDistance;
+      for (let i = spheres.length - 1; i >= 0; i--) {
+        if (camera.position.distanceToSquared(spheres[i].position) > max2) {
+          scene.remove(spheres[i]);
+          spheres.splice(i, 1);
+        }
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (!paused) {
+        if (braking && speed > 50) {
+          speed *= 0.94;
+        } else if (braking && speed > 15) {
+          speed *= 0.96; 
+        } else if (braking && speed > 10) {
+          speed *= 0.98; 
+        } else if (braking && speed > 1) {
+          speed *= 0.95; 
+        } else if (braking && speed > 0.0001) {
+          speed *= 0.9;
+
+        } else if (braking) {
+          speed = 0;
+          braking = false;
+        }
+        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+        camera.position.addScaledVector(dir, speed * 0.1);
+        const cnt = Math.floor(speed * 2);
+        for (let i = 0; i < cnt; i++) spawnSphere();
+        pruneSpheres();
+      }
+      renderer.clear();
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>

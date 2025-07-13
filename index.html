@@ -1,8 +1,9 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
+<!-- V3 -->
 <head>
   <meta charset="UTF-8">
-  <!-- V2 -->
   <title>Lightspeed Explorer</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: black; }
@@ -44,6 +45,7 @@
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
 
+    const isTouchDevice = 'ontouchstart' in window;
     const spheres = [];
     const spawnDistance = 500;
     const initialFillCount = 4000;
@@ -103,9 +105,14 @@
       renderer.autoClear = false;
       document.body.appendChild(renderer.domElement);
 
-      // accept any touch or click to start (pointer lock)
-      const startInteraction = () => {
-        if (paused) document.body.requestPointerLock();
+      const startInteraction = (e) => {
+        if (!paused) return;
+        e.preventDefault();
+        if (isTouchDevice) {
+          paused = false;
+        } else {
+          document.body.requestPointerLock();
+        }
       };
       document.body.addEventListener('click',  startInteraction);
       document.body.addEventListener('touchstart', startInteraction, { passive: false });
@@ -128,7 +135,7 @@
         if (!paused) braking = true;
       });
       bind(document.getElementById('pauseButton'), () => {
-        if (!paused) document.exitPointerLock();
+        if (!paused && !isTouchDevice) document.exitPointerLock();
       });
 
       document.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -160,6 +167,7 @@
     }
 
     function onPointerLockChange() {
+      if (isTouchDevice) return;
       paused = !document.pointerLockElement;
       braking = false;
     }
@@ -225,10 +233,10 @@
       requestAnimationFrame(animate);
       if (!paused) {
         if (braking) {
-          if      (speed > 50)   speed *= 0.94;
-          else if (speed > 15)   speed *= 0.96;
-          else if (speed > 10)   speed *= 0.98;
-          else if (speed > 1)    speed *= 0.95;
+          if      (speed > 50)    speed *= 0.94;
+          else if (speed > 15)    speed *= 0.96;
+          else if (speed > 10)    speed *= 0.98;
+          else if (speed > 1)     speed *= 0.95;
           else if (speed > 0.0001) speed *= 0.9;
           else { speed = 0; braking = false; }
         }
@@ -245,3 +253,4 @@
   </script>
 </body>
 </html>
+```

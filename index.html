@@ -5,16 +5,7 @@
   <title>Lightspeed Explorer</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
-    canvas { display: block; }
-    #overlay {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      color: white;
-      font-family: sans-serif;
-      z-index: 10;
-    }
-    /* Control buttons container */
+    canvas { display: block; touch-action: none; }
     #controls {
       position: absolute;
       bottom: 20px;
@@ -34,31 +25,34 @@
       border-radius: 4px;
       font-size: 14px;
       cursor: pointer;
+      touch-action: none;
     }
     #controls button:active {
       background: rgba(255,255,255,0.2);
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 </head>
 <body>
-  <!-- <div id="overlay">Click to start exploring.</div> -->
-  <!-- Control buttons -->
   <div id="controls">
     <button id="accelerateButton">Accelerate</button>
     <button id="fullStopButton">Full Stop</button>
     <button id="brakeButton">Brake</button>
     <button id="pauseButton">Pause</button>
   </div>
-  <script>
-    let scene, camera, renderer;
-    let speed = 0;
-    let pitch = 0, yaw = 0;
-    let spheres = [];
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
+
+    // state
+    const spheres = [];
     const spawnDistance = 500;
     const initialFillCount = 4000;
+    let scene, camera, renderer;
+    let speed = 0;
     let paused = true;
     let braking = false;
+    let isTouchDragging = false;
+    let lastTouchX = 0, lastTouchY = 0;
 
     init();
     animate();
@@ -109,23 +103,37 @@
       renderer.autoClear = false;
       document.body.appendChild(renderer.domElement);
 
-      document.body.addEventListener('click', () => document.body.requestPointerLock());
+      document.body.addEventListener('click', () => {
+        if (paused) document.body.requestPointerLock();
+      });
       window.addEventListener('resize', onWindowResize);
       document.addEventListener('keydown', onKeyDown);
-      document.addEventListener('keyup', onKeyUp);
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('pointerlockchange', onPointerLockChange);
 
-      document.getElementById('accelerateButton').onclick = () => {
+      const bindAction = (el, fn) => {
+        el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
+      };
+      bindAction(document.getElementById('accelerateButton'), () => {
         if (!paused) { speed = Math.min(64, Math.max(speed * 1.25, 0.5)); braking = false; }
-      };
-      document.getElementById('brakeButton').onclick = () => {
+      });
+      bindAction(document.getElementById('brakeButton'), () => {
         if (!paused) { speed *= 0.8; braking = false; }
-      };
-      document.getElementById('fullStopButton').onclick = () => { if (!paused) braking = true; };
-      document.getElementById('pauseButton').onclick = () => document.exitPointerLock();
+      });
+      bindAction(document.getElementById('fullStopButton'), () => {
+        if (!paused) braking = true;
+      });
+      bindAction(document.getElementById('pauseButton'), () => {
+        if (!paused) document.exitPointerLock();
+      });
 
-      for (let i = 0; i < initialFillCount; i++) spawnInitialSphere();
+      document.addEventListener('touchstart', onTouchStart, { passive: false });
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+
+      for (let i = 0; i < initialFillCount; i++) {
+        spawnInitialSphere();
+      }
     }
 
     function onWindowResize() {
@@ -141,25 +149,38 @@
       if (e.code === 'Space') braking = true;
     }
 
-    function onKeyUp(e) {
-      // no-op
-    }
-
     function onMouseMove(e) {
       if (paused) return;
-      // Incremental rotation: yaw around camera's local up, pitch around camera's local right
-      const movementX = e.movementX || 0;
-      const movementY = e.movementY || 0;
-      // Rotate pitch (up/down) around camera's local X axis
-      camera.rotateX(-movementY * 0.002);
-      // Rotate yaw (left/right) around camera's local Y axis
-      camera.rotateY(-movementX * 0.002);
+      camera.rotateX(-e.movementY * 0.002);
+      camera.rotateY(-e.movementX * 0.002);
     }
 
     function onPointerLockChange() {
       paused = !document.pointerLockElement;
-      document.getElementById('overlay').style.display = paused ? 'block' : 'none';
-      if (paused) braking = false;
+      braking = false;
+    }
+
+    function onTouchStart(e) {
+      if (paused || e.touches.length !== 1) return;
+      isTouchDragging = true;
+      lastTouchX = e.touches[0].pageX;
+      lastTouchY = e.touches[0].pageY;
+    }
+
+    function onTouchMove(e) {
+      if (!isTouchDragging || paused) return;
+      e.preventDefault();
+      const t = e.touches[0];
+      const dx = t.pageX - lastTouchX;
+      const dy = t.pageY - lastTouchY;
+      camera.rotateX(-dy * 0.002);
+      camera.rotateY(-dx * 0.002);
+      lastTouchX = t.pageX;
+      lastTouchY = t.pageY;
+    }
+
+    function onTouchEnd() {
+      isTouchDragging = false;
     }
 
     function randomPointOnSphere(r) {
@@ -187,15 +208,8 @@
 
     function createSphereMesh() {
       const geo = new THREE.SphereGeometry(0.5, 16, 16);
-      const col = randomStarColor();
-      return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col }));
-    }
-
-    function spawnSphere() {
-      const s = createSphereMesh();
-      s.position.copy(camera.position).add(randomPointOnSphere(spawnDistance));
-      scene.add(s);
-      spheres.push(s);
+      const mat = new THREE.MeshBasicMaterial({ color: randomStarColor() });
+      return new THREE.Mesh(geo, mat);
     }
 
     function spawnInitialSphere() {
@@ -206,9 +220,9 @@
     }
 
     function pruneSpheres() {
-      const max2 = spawnDistance * spawnDistance;
+      const limit2 = spawnDistance * spawnDistance;
       for (let i = spheres.length - 1; i >= 0; i--) {
-        if (camera.position.distanceToSquared(spheres[i].position) > max2) {
+        if (camera.position.distanceToSquared(spheres[i].position) > limit2) {
           scene.remove(spheres[i]);
           spheres.splice(i, 1);
         }
@@ -218,25 +232,19 @@
     function animate() {
       requestAnimationFrame(animate);
       if (!paused) {
-        if (braking && speed > 50) {
-          speed *= 0.94;
-        } else if (braking && speed > 15) {
-          speed *= 0.96; 
-        } else if (braking && speed > 10) {
-          speed *= 0.98; 
-        } else if (braking && speed > 1) {
-          speed *= 0.95; 
-        } else if (braking && speed > 0.0001) {
-          speed *= 0.9;
-
-        } else if (braking) {
-          speed = 0;
-          braking = false;
+        if (braking) {
+          if (speed > 50) speed *= 0.94;
+          else if (speed > 15) speed *= 0.96;
+          else if (speed > 10) speed *= 0.98;
+          else if (speed > 1) speed *= 0.95;
+          else if (speed > 0.0001) speed *= 0.9;
+          else { speed = 0; braking = false; }
         }
-        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+        const dir = new THREE.Vector3(0, 0, -1)
+          .applyQuaternion(camera.quaternion)
+          .normalize();
         camera.position.addScaledVector(dir, speed * 0.1);
-        const cnt = Math.floor(speed * 2);
-        for (let i = 0; i < cnt; i++) spawnSphere();
+        for (let i = 0; i < Math.floor(speed * 2); i++) spawnInitialSphere();
         pruneSpheres();
       }
       renderer.clear();

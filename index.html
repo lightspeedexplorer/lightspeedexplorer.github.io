@@ -1,36 +1,52 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
-<!-- V3 -->
 <head>
   <meta charset="UTF-8">
+  <!-- V4 -->
   <title>Lightspeed Explorer</title>
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: black; }
-    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-    #controls {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: grid;
-      grid-template-columns: auto auto;
-      grid-template-rows: auto auto;
-      gap: 10px;
-      z-index: 10;
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: black;
     }
-    #controls button {
-      padding: 8px 12px;
-      background: rgba(255,255,255,0.1);
-      color: white;
-      border: 1px solid white;
-      border-radius: 4px;
-      font-size: 14px;
-      cursor: pointer;
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
       touch-action: none;
     }
+    #controls {
+    position: absolute;
+    bottom: 20px;           /* distance from bottom */
+    left: 50%;              /* center horizontally */
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 20px;
+    z-index: 10;
+    /* remove full-width and height constraints to let buttons size naturally */
+    width: auto;
+    height: auto;
+    }
+    #controls button {
+      padding: 20px 30px;
+      background: rgba(0, 0, 0, 0.7); /* darker background */
+      color: #66aa66;                 /* light green text */
+      border: 2px solid #66aa66;      /* light green border */
+      border-radius: 8px;
+      font-size: 20px;
+      cursor: pointer;
+      touch-action: none;
+      width: 20vw;   /* 20% of viewport width */
+      height: 8vh;  /* 12% of viewport height */
+    }
     #controls button:active {
-      background: rgba(255,255,255,0.2);
+      background: rgba(0, 0, 0, 0.85);
     }
   </style>
 </head>
@@ -105,7 +121,7 @@
       renderer.autoClear = false;
       document.body.appendChild(renderer.domElement);
 
-      const startInteraction = (e) => {
+      const startInteraction = e => {
         if (!paused) return;
         e.preventDefault();
         if (isTouchDevice) {
@@ -114,7 +130,7 @@
           document.body.requestPointerLock();
         }
       };
-      document.body.addEventListener('click',  startInteraction);
+      document.body.addEventListener('click', startInteraction);
       document.body.addEventListener('touchstart', startInteraction, { passive: false });
 
       window.addEventListener('resize', onWindowResize);
@@ -155,9 +171,9 @@
 
     function onKeyDown(e) {
       if (paused) return;
-      if (e.key === 'w')         { speed = Math.min(64, Math.max(speed * 1.25, 0.5)); braking = false; }
-      if (e.key === 's')         { speed *= 0.8; braking = false; }
-      if (e.code === 'Space')    braking = true;
+      if (e.key === 'w')        { speed = Math.min(64, Math.max(speed * 1.25, 0.5)); braking = false; }
+      if (e.key === 's')        { speed *= 0.8; braking = false; }
+      if (e.code === 'Space')   braking = true;
     }
 
     function onMouseMove(e) {
@@ -183,10 +199,8 @@
       if (!isTouchDragging) return;
       e.preventDefault();
       const t = e.touches[0];
-      const dx = t.pageX - lastTouchX;
-      const dy = t.pageY - lastTouchY;
-      camera.rotateX(-dy * 0.002);
-      camera.rotateY(-dx * 0.002);
+      camera.rotateX(-(t.pageY - lastTouchY) * 0.002);
+      camera.rotateY(-(t.pageX - lastTouchX) * 0.002);
       lastTouchX = t.pageX;
       lastTouchY = t.pageY;
     }
@@ -253,4 +267,3 @@
   </script>
 </body>
 </html>
-```

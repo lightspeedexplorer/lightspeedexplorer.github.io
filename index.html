@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <!-- V6 -->
+  <!-- V7 -->
   <title>Lightspeed Explorer</title>
   <style>
     html, body {
@@ -112,7 +112,7 @@
     <button id="accelerateButton">Accelerate</button>
     <button id="fullStopButton">Full Stop</button>
     <button id="brakeButton">Brake</button>
-    <button id="pauseButton">Pause</button>
+    <!-- <button id="pauseButton">Pause</button> -->
   </div>
 
   <script type="module">
@@ -219,9 +219,9 @@
       bind(document.getElementById('fullStopButton'), () => {
         if (!paused) braking = true;
       });
-      bind(document.getElementById('pauseButton'), () => {
-        if (!paused && !isTouchDevice) document.exitPointerLock();
-      });
+    //   bind(document.getElementById('pauseButton'), () => {
+    //     if (!paused && !isTouchDevice) document.exitPointerLock();
+    //   });
 
       // touch-swipe look
       document.addEventListener('touchstart', onTouchStart, { passive: false });

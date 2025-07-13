@@ -1,8 +1,9 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <!-- V4 -->
+  <!-- V5 -->
   <title>Lightspeed Explorer</title>
   <style>
     html, body {
@@ -13,44 +14,98 @@
       overflow: hidden;
       background: black;
     }
+
     canvas {
       display: block;
       width: 100%;
       height: 100%;
       touch-action: none;
+      -webkit-user-select: none;      /* Safari */
+      -ms-user-select: none;          /* IE10+ */
+      user-select: none;              /* standard */
+      -webkit-touch-callout: none;    /* iOS long-press menu */
+      -webkit-tap-highlight-color: transparent; /* remove tap highlight */
     }
+
+    /* Preview overlay for desktop */
+    #overlay {
+      display: none;
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      color: #aaffaa;
+      font-family: sans-serif;
+      font-size: 16px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 1rem;
+      z-index: 10;
+    }
+
+    /* Controls for mobile */
     #controls {
-    position: absolute;
-    bottom: 20px;           /* distance from bottom */
-    left: 50%;              /* center horizontally */
-    transform: translateX(-50%);
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    grid-template-rows: repeat(2, 1fr);
-    gap: 20px;
-    z-index: 10;
-    /* remove full-width and height constraints to let buttons size naturally */
-    width: auto;
-    height: auto;
+      display: none;
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 20px;
+      z-index: 10;
     }
+
     #controls button {
-      padding: 20px 30px;
-      background: rgba(0, 0, 0, 0.7); /* darker background */
-      color: #66aa66;                 /* light green text */
-      border: 2px solid #66aa66;      /* light green border */
+      background: rgba(0, 0, 0, 0.7);
+      color: #66aa66;
+      border: 2px solid #66aa66;
       border-radius: 8px;
       font-size: 20px;
       cursor: pointer;
       touch-action: none;
-      width: 20vw;   /* 20% of viewport width */
-      height: 8vh;  /* 12% of viewport height */
+      width: 20vw;
+      height: 8vh;
+      min-width: 100px;
+      min-height: 50px;
+      -webkit-user-select: none;      /* Safari */
+      -ms-user-select: none;          /* IE10+ */
+      user-select: none;              /* standard */
+      -webkit-touch-callout: none;    /* iOS long-press menu */
+      -webkit-tap-highlight-color: transparent; /* remove tap highlight */
     }
+
     #controls button:active {
       background: rgba(0, 0, 0, 0.85);
+    }
+
+    /* Desktop (fine pointer) shows overlay, hides buttons */
+    @media (pointer: fine) {
+      #overlay {
+        display: flex;
+      }
+      #controls {
+        display: none;
+      }
+    }
+
+    /* Mobile (coarse pointer) shows buttons, hides overlay */
+    @media (pointer: coarse) {
+      #controls {
+        display: grid;
+      }
+      #overlay {
+        display: none;
+      }
     }
   </style>
 </head>
 <body>
+  <div id="overlay">
+    Click to start, W to accelerate, S to slow, Space to stop, Esc to pause
+  </div>
+
   <div id="controls">
     <button id="accelerateButton">Accelerate</button>
     <button id="fullStopButton">Full Stop</button>
@@ -62,9 +117,12 @@
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
 
     const isTouchDevice = 'ontouchstart' in window;
+    const overlay = document.getElementById('overlay');
+    const controls = document.getElementById('controls');
     const spheres = [];
     const spawnDistance = 500;
     const initialFillCount = 4000;
+
     let scene, camera, renderer;
     let speed = 0;
     let paused = true;
@@ -106,6 +164,7 @@
     }
 
     function init() {
+      // scene & camera
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(
         75,
@@ -115,17 +174,20 @@
       );
       camera.position.set(0, 0, 0);
 
+      // renderer
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setClearColor(0x000000, 0.1);
       renderer.autoClear = false;
       document.body.appendChild(renderer.domElement);
 
+      // start interaction (click or touch)
       const startInteraction = e => {
         if (!paused) return;
         e.preventDefault();
         if (isTouchDevice) {
           paused = false;
+          overlay.style.display = 'none';
         } else {
           document.body.requestPointerLock();
         }
@@ -133,19 +195,24 @@
       document.body.addEventListener('click', startInteraction);
       document.body.addEventListener('touchstart', startInteraction, { passive: false });
 
+      // handle pointer lock change (desktop)
+      document.addEventListener('pointerlockchange', () => {
+        paused = !document.pointerLockElement;
+        overlay.style.display = paused ? 'flex' : 'none';
+      });
+
+      // window & input events
       window.addEventListener('resize', onWindowResize);
       document.addEventListener('keydown', onKeyDown);
       document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('pointerlockchange', onPointerLockChange);
 
-      const bind = (el, fn) => {
-        el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
-      };
+      // unify pointer events for buttons
+      const bind = (el, fn) => el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
       bind(document.getElementById('accelerateButton'), () => {
-        if (!paused) { speed = Math.min(64, Math.max(speed * 1.25, 0.5)); braking = false; }
+        if (!paused) { speed = Math.min(64, Math.max(speed * 2, 0.5)); braking = false; }
       });
       bind(document.getElementById('brakeButton'), () => {
-        if (!paused) { speed *= 0.8; braking = false; }
+        if (!paused) { speed *= 0.5; braking = false; }
       });
       bind(document.getElementById('fullStopButton'), () => {
         if (!paused) braking = true;
@@ -154,13 +221,13 @@
         if (!paused && !isTouchDevice) document.exitPointerLock();
       });
 
+      // touch-swipe look
       document.addEventListener('touchstart', onTouchStart, { passive: false });
       document.addEventListener('touchmove',  onTouchMove,  { passive: false });
       document.addEventListener('touchend',   onTouchEnd);
 
-      for (let i = 0; i < initialFillCount; i++) {
-        spawnInitialSphere();
-      }
+      // initial star field
+      for (let i = 0; i < initialFillCount; i++) spawnInitialSphere();
     }
 
     function onWindowResize() {
@@ -171,21 +238,15 @@
 
     function onKeyDown(e) {
       if (paused) return;
-      if (e.key === 'w')        { speed = Math.min(64, Math.max(speed * 1.25, 0.5)); braking = false; }
-      if (e.key === 's')        { speed *= 0.8; braking = false; }
-      if (e.code === 'Space')   braking = true;
+      if (e.key === 'w')      { speed = Math.min(64, Math.max(speed * 1.25, 0.5)); braking = false; }
+      if (e.key === 's')      { speed *= 0.8; braking = false; }
+      if (e.code === 'Space') braking = true;
     }
 
     function onMouseMove(e) {
       if (paused) return;
       camera.rotateX(-e.movementY * 0.002);
       camera.rotateY(-e.movementX * 0.002);
-    }
-
-    function onPointerLockChange() {
-      if (isTouchDevice) return;
-      paused = !document.pointerLockElement;
-      braking = false;
     }
 
     function onTouchStart(e) {
@@ -247,11 +308,11 @@
       requestAnimationFrame(animate);
       if (!paused) {
         if (braking) {
-          if      (speed > 50)    speed *= 0.94;
-          else if (speed > 15)    speed *= 0.96;
-          else if (speed > 10)    speed *= 0.98;
-          else if (speed > 1)     speed *= 0.95;
-          else if (speed > 0.0001) speed *= 0.9;
+          if      (speed > 50)      speed *= 0.94;
+          else if (speed > 15)      speed *= 0.96;
+          else if (speed > 10)      speed *= 0.98;
+          else if (speed > 1)       speed *= 0.95;
+          else if (speed > 0.0001)  speed *= 0.9;
           else { speed = 0; braking = false; }
         }
         const dir = new THREE.Vector3(0, 0, -1)
@@ -267,3 +328,4 @@
   </script>
 </body>
 </html>
+```
